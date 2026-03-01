@@ -9,39 +9,42 @@ export default function PlayerPage() {
   const [extracting, setExtracting] = useState(false)
   const [error, setError] = useState('')
 
-  const extractVoeUrl = async (url: string): Promise<string | null> => {
-    // For VOE links, we need to open in new tab and extract
-    // This is a limitation - VOE requires JS execution
-    return null
-  }
-
   const handlePlay = async () => {
     if (!url.trim()) return
     
     setError('')
+    setExtracting(true)
     
-    // Direct video URL
-    if (url.includes('.m3u8') || url.includes('.mp4')) {
-      setVideoUrl(url)
-      return
+    try {
+      // Direct video URL
+      if (url.includes('.m3u8') || url.includes('.mp4')) {
+        setVideoUrl(url)
+        return
+      }
+      
+      // Use server-side extraction API
+      const response = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Extraction failed')
+      }
+      
+      if (data.videoUrl) {
+        setVideoUrl(data.videoUrl)
+      } else {
+        throw new Error('No video URL found')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Extraction failed')
+    } finally {
+      setExtracting(false)
     }
-    
-    // For streaming sites, show instructions
-    if (url.includes('s.to') || url.includes('voe.sx')) {
-      setError(`Auto-Extraction für ${url.includes('s.to') ? 's.to' : 'VOE'} nicht möglich.
-
-So bekommst du die Video-URL:
-1. Öffne ${url} in einem neuen Tab
-2. Öffne Browser DevTools (F12) → Network Tab
-3. Spiele das Video ab
-4. Suche nach ".m3u8" in den Network Requests
-5. Kopiere die URL und füge sie hier ein
-
-Tipp: Nutze die Browser-Extension "Video DownloadHelper" für einfachere Extraction.`)
-      return
-    }
-    
-    setVideoUrl(url)
   }
 
   return (
@@ -67,10 +70,10 @@ Tipp: Nutze die Browser-Extension "Video DownloadHelper" für einfachere Extract
           />
           <button
             onClick={handlePlay}
-            disabled={!url.trim()}
+            disabled={!url.trim() || extracting}
             className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700 rounded-lg font-medium transition"
           >
-            Play
+            {extracting ? 'Extracting...' : 'Play'}
           </button>
         </div>
 
@@ -92,7 +95,7 @@ Tipp: Nutze die Browser-Extension "Video DownloadHelper" für einfachere Extract
           <ul className="list-disc list-inside space-y-1">
             <li>HLS Streams (.m3u8)</li>
             <li>MP4 Videos</li>
-            <li>Direct video URLs</li>
+            <li>VOE Links (automatische Extraction)</li>
           </ul>
         </div>
       </div>
