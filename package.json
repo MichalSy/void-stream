@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "npx @michalsy/aiko-webapp-core generate && cp -r .aiko/app/api/health app/api/",
+    "prebuild": "npx @michalsy/aiko-webapp-core generate && cp -r .aiko/app/api/* app/api/",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

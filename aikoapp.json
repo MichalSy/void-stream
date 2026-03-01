@@ -11,9 +11,24 @@
     "loginSubtitle": "Enter the void",
     "successRedirect": "/player"
   },
+  "pages": [
+    { "path": "/player", "label": "Player", "icon": "🎬" }
+  ],
+  "abilities": {
+    "enabled": true,
+    "list": [
+      {
+        "id": "access",
+        "name": "Passierschein",
+        "emoji": "🎫",
+        "description": "Zugang zu Void Stream",
+        "is_passierschein": true
+      }
+    ]
+  },
   "routes": {
-    "protected": ["/player", "/api"],
-    "public": ["/", "/login", "/auth/callback"]
+    "protected": ["/player"],
+    "public": ["/", "/login", "/auth/callback", "/api/extract"]
   },
   "theme": {
     "primaryColor": "#6366f1",
