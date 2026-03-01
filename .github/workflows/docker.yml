@@ -27,16 +27,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BASE="${{ env.BASE_VERSION }}"
-
+          
           # Get tags from GitHub API
           TAGS=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/users/MichalSy/packages/container/${{ env.IMAGE_NAME }}/versions" 2>/dev/null | \
             jq -r '.[].metadata.container.tags[]' 2>/dev/null || echo "")
-
+          
           # Find highest patch version for this base
           LAST_PATCH=$(echo "$TAGS" | grep -E "^${BASE}\.[0-9]+$" | sed "s/^${BASE}\.//" | sort -n | tail -1)
-
+          
           if [ -z "$LAST_PATCH" ]; then
             PATCH=0
             echo "No previous version found for ${BASE}.X, starting at ${BASE}.0"
@@ -44,15 +44,15 @@ jobs:
             PATCH=$((LAST_PATCH + 1))
             echo "Last version: ${BASE}.${LAST_PATCH}, next: ${BASE}.${PATCH}"
           fi
-
+          
           VERSION="${BASE}.${PATCH}"
           TIMESTAMP=$(date +"%d.%m.%Y %H:%M")
-
+          
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
           echo "full_image=${{ env.REGISTRY }}/michalsy/${{ env.IMAGE_NAME }}:${VERSION}" >> $GITHUB_OUTPUT
           echo "latest_image=${{ env.REGISTRY }}/michalsy/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
-
+          
           echo "📦 Building version: ${VERSION} (${TIMESTAMP})"
 
       - name: Setup Node.js
@@ -102,6 +102,22 @@ jobs:
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.created=${{ steps.version.outputs.timestamp }}
 
+      - name: Update gitops-config
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git clone --depth 1 https://x-access-token:${{ secrets.GITOPS_TOKEN }}@github.com/MichalSy/gitops-config.git /tmp/gitops-config
+          
+          cd /tmp/gitops-config
+          
+          # Update kustomization.yaml with new version
+          sed -i 's|newTag: "[0-9]*\.[0-9]*\.[0-9]*"|newTag: "${{ steps.version.outputs.version }}"|g' apps/void-stream/kustomization.yaml
+          
+          git add -A
+          git commit -m "chore: update void-stream to ${{ steps.version.outputs.version }}" || echo "No changes"
+          git push
+
       - name: Summary
         run: |
           echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
@@ -110,4 +126,4 @@ jobs:
           echo "**Built:** ${{ steps.version.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ steps.version.outputs.full_image }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "⚠️ Manually update gitops-config/apps/void-stream/kustomization.yaml"
+          echo "✅ gitops-config updated → ArgoCD auto-sync"
