@@ -3,15 +3,15 @@ name: Build and Push Docker Image
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: void-stream
+  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+  BASE_VERSION: "1.0"
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,33 +21,109 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Determine next version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BASE="${{ env.BASE_VERSION }}"
+
+          # Get tags from GitHub API
+          TAGS=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/users/MichalSy/packages/container/${{ env.IMAGE_NAME }}/versions" 2>/dev/null | \
+            jq -r '.[].metadata.container.tags[]' 2>/dev/null || echo "")
+
+          # Find highest patch version for this base
+          LAST_PATCH=$(echo "$TAGS" | grep -E "^${BASE}\.[0-9]+$" | sed "s/^${BASE}\.//" | sort -n | tail -1)
+
+          if [ -z "$LAST_PATCH" ]; then
+            PATCH=0
+            echo "No previous version found for ${BASE}.X, starting at ${BASE}.0"
+          else
+            PATCH=$((LAST_PATCH + 1))
+            echo "Last version: ${BASE}.${LAST_PATCH}, next: ${BASE}.${PATCH}"
+          fi
+
+          VERSION="${BASE}.${PATCH}"
+          TIMESTAMP=$(date +"%d.%m.%Y %H:%M")
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "full_image=${{ env.REGISTRY }}/michalsy/${{ env.IMAGE_NAME }}:${VERSION}" >> $GITHUB_OUTPUT
+          echo "latest_image=${{ env.REGISTRY }}/michalsy/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+
+          echo "📦 Building version: ${VERSION} (${TIMESTAMP})"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Configure npm for GitHub Packages
+        run: |
+          echo "@michalsy:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+
+      - name: Create version env file
+        run: |
+          echo "NEXT_PUBLIC_APP_VERSION=${{ steps.version.outputs.version }}" >> .env.local
+          echo "NEXT_PUBLIC_APP_VERSION_DATE=${{ steps.version.outputs.timestamp }}" >> .env.local
+          cat .env.local
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run build
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
-        if: github.event_name != 'pull_request'
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          push: true
+          tags: |
+            ${{ steps.version.outputs.full_image }}
+            ${{ steps.version.outputs.latest_image }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.created=${{ steps.version.outputs.timestamp }}
+
+      - name: Update gitops-config
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git clone --depth 1 https://x-access-token:${{ secrets.GITOPS_TOKEN }}@github.com/MichalSy/gitops-config.git /tmp/gitops-config
+          
+          cd /tmp/gitops-config
+          
+          # Update kustomization.yaml with new version
+          sed -i 's|newTag: "[0-9]*\.[0-9]*\.[0-9]*"|newTag: "${{ steps.version.outputs.version }}"|g' apps/void-stream/kustomization.yaml
+          
+          git add -A
+          git commit -m "chore: update void-stream to ${{ steps.version.outputs.version }}" || echo "No changes"
+          git push
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Built:** ${{ steps.version.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ steps.version.outputs.full_image }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ gitops-config updated → ArgoCD will auto-sync"

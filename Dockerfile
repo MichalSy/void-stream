@@ -1,35 +1,40 @@
-# Build stage
-FROM node:20-alpine AS builder
+# Void Stream - Docker Image (Runtime only)
+# Based on Node.js 20 Alpine
+
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Copy package files and ALL node_modules from build
 COPY package*.json ./
+COPY node_modules ./node_modules
 
-# Install dependencies
-RUN npm ci
+# Copy built application
+COPY .next ./.next
+COPY public ./public
+COPY server.js ./
+COPY app ./app
+COPY next.config.js ./
 
-# Copy source
-COPY . .
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Build
-RUN npm run build
+# Change ownership
+RUN chown -R nextjs:nodejs /app
 
-# Production stage
-FROM node:20-alpine AS runner
-
-WORKDIR /app
-
-# Set to production
-ENV NODE_ENV=production
-
-# Copy built files
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+USER nextjs
 
 # Expose port
 EXPOSE 3000
 
-# Start server
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1
+
+# Start the application
+ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "server.js"]
