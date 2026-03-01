@@ -1,0 +1,22 @@
+{
+  "app": {
+    "name": "Void Stream",
+    "url": "https://void-stream.sytko.de",
+    "description": "Nerd-grade video streaming platform"
+  },
+  "auth": {
+    "enabled": true,
+    "provider": "google",
+    "loginTitle": "Void Stream",
+    "loginSubtitle": "Enter the void",
+    "successRedirect": "/player"
+  },
+  "routes": {
+    "protected": ["/player", "/api"],
+    "public": ["/", "/login", "/auth/callback"]
+  },
+  "theme": {
+    "primaryColor": "#6366f1",
+    "secondaryColor": "#8b5cf6"
+  }
+}
