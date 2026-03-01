@@ -9,6 +9,11 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
+# Configure npm for private packages
+ARG NPM_TOKEN
+RUN echo "@michalsy:registry=https://npm.pkg.github.com" > .npmrc && \
+    echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc
+
 # Install dependencies
 RUN npm ci
 

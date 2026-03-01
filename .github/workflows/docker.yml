@@ -28,21 +28,17 @@ jobs:
         run: |
           BASE="${{ env.BASE_VERSION }}"
           
-          # Get tags from GitHub API
           TAGS=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/users/MichalSy/packages/container/${{ env.IMAGE_NAME }}/versions" 2>/dev/null | \
             jq -r '.[].metadata.container.tags[]' 2>/dev/null || echo "")
           
-          # Find highest patch version for this base
           LAST_PATCH=$(echo "$TAGS" | grep -E "^${BASE}\.[0-9]+$" | sed "s/^${BASE}\.//" | sort -n | tail -1)
           
           if [ -z "$LAST_PATCH" ]; then
             PATCH=0
-            echo "No previous version found for ${BASE}.X, starting at ${BASE}.0"
           else
             PATCH=$((LAST_PATCH + 1))
-            echo "Last version: ${BASE}.${LAST_PATCH}, next: ${BASE}.${PATCH}"
           fi
           
           VERSION="${BASE}.${PATCH}"
@@ -52,8 +48,6 @@ jobs:
           echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
           echo "full_image=${{ env.REGISTRY }}/michalsy/${{ env.IMAGE_NAME }}:${VERSION}" >> $GITHUB_OUTPUT
           echo "latest_image=${{ env.REGISTRY }}/michalsy/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
-          
-          echo "📦 Building version: ${VERSION} (${TIMESTAMP})"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -69,15 +63,13 @@ jobs:
         run: |
           echo "NEXT_PUBLIC_APP_VERSION=${{ steps.version.outputs.version }}" >> .env.local
           echo "NEXT_PUBLIC_APP_VERSION_DATE=${{ steps.version.outputs.timestamp }}" >> .env.local
-          cat .env.local
+          echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" >> .env.local
+          echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}" >> .env.local
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build application
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
 
       - name: Set up Docker Buildx
@@ -95,6 +87,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            NPM_TOKEN=${{ secrets.NPM_TOKEN }}
           tags: |
             ${{ steps.version.outputs.full_image }}
             ${{ steps.version.outputs.latest_image }}
@@ -111,7 +105,6 @@ jobs:
           
           cd /tmp/gitops-config
           
-          # Update kustomization.yaml with new version
           sed -i 's|newTag: "[0-9]*\.[0-9]*\.[0-9]*"|newTag: "${{ steps.version.outputs.version }}"|g' apps/void-stream/kustomization.yaml
           
           git add -A
