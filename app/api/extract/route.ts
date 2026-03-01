@@ -1,37 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { chromium } from 'playwright'
 
-// Supported streaming sites
-const SUPPORTED_DOMAINS = [
-  's.to',
-  'serienstream.to',
-  'voe.sx',
-  'voe-unblock.com',
-  'streamtape.com',
-  'vidoza.net',
-  'doodstream.com'
-]
-
-// Extract video URL using server-side logic
-async function extractVideoUrl(pageUrl: string): Promise<string | null> {
-  // For VOE links, use the extraction logic
-  if (pageUrl.includes('voe.sx') || pageUrl.includes('voe-unblock')) {
-    // Extract video ID from URL
-    const match = pageUrl.match(/\/e\/([a-zA-Z0-9]+)/)
-    if (!match) return null
-    
-    const videoId = match[1]
-    
-    // Use browser automation to extract (in production, this would use Playwright)
-    // For now, return a placeholder that the client can use
-    return null // Will be handled by client-side extraction
-  }
+async function extractVoeUrl(voeUrl: string): Promise<string | null> {
+  const browser = await chromium.launch({ 
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  })
   
-  // Direct video URLs
-  if (pageUrl.includes('.m3u8') || pageUrl.includes('.mp4')) {
-    return pageUrl
-  }
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+  })
   
-  return null
+  const page = await context.newPage()
+  
+  // Collect video URLs from network
+  const videoUrls: string[] = []
+  page.on('response', async (response) => {
+    const url = response.url()
+    if (url.includes('.m3u8')) {
+      videoUrls.push(url)
+    }
+  })
+  
+  try {
+    await page.goto(voeUrl, { waitUntil: 'networkidle', timeout: 30000 })
+    await page.waitForTimeout(3000)
+    
+    // Try jwplayer first
+    const jwplayerUrl = await page.evaluate(() => {
+      if (typeof (window as any).jwplayer !== 'undefined') {
+        const player = (window as any).jwplayer()
+        return player?.getPlaylistItem()?.file || null
+      }
+      return null
+    })
+    
+    await browser.close()
+    return jwplayerUrl || videoUrls[0] || null
+    
+  } catch (error) {
+    await browser.close()
+    throw error
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -42,15 +52,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 })
     }
 
-    // Validate URL
-    let parsedUrl: URL
-    try {
-      parsedUrl = new URL(url)
-    } catch {
-      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
-    }
-
-    // Check if direct video URL
+    // Direct video URL
     if (url.includes('.m3u8') || url.includes('.mp4')) {
       return NextResponse.json({ 
         videoUrl: url,
@@ -58,33 +60,30 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // For streaming sites, we need to extract the video URL
-    // This requires browser automation which should be done server-side
-    // For security, we'll return instructions for the client
-    
-    const domain = parsedUrl.hostname.replace('www.', '')
-    const isSupported = SUPPORTED_DOMAINS.some(d => domain.includes(d))
-    
-    if (!isSupported) {
+    // VOE extraction
+    if (url.includes('voe.sx') || url.includes('voe-unblock')) {
+      const videoUrl = await extractVoeUrl(url)
+      
+      if (videoUrl) {
+        return NextResponse.json({ 
+          videoUrl,
+          type: 'hls'
+        })
+      }
+      
       return NextResponse.json({ 
-        error: 'Unsupported streaming site',
-        supported: SUPPORTED_DOMAINS 
-      }, { status: 400 })
+        error: 'Could not extract video from VOE' 
+      }, { status: 404 })
     }
 
-    // Return the page URL for client-side extraction
-    // In production, this would use a server-side browser
     return NextResponse.json({ 
-      videoUrl: null,
-      requiresExtraction: true,
-      pageUrl: url,
-      message: 'Use browser extension or manual extraction'
-    })
+      error: 'Unsupported URL. Only VOE and direct video URLs are supported.' 
+    }, { status: 400 })
 
   } catch (error) {
     console.error('Extract error:', error)
     return NextResponse.json({ 
-      error: 'Failed to process URL' 
+      error: 'Failed to extract video URL' 
     }, { status: 500 })
   }
 }

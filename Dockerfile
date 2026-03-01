@@ -1,23 +1,41 @@
-# Void Stream - Docker Image (Runtime only)
+# Void Stream - Docker Image with Playwright
 # Based on Node.js 20 Alpine
 
-FROM node:20-alpine
+# Build stage
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
-
-# Copy package files and ALL node_modules from build
+# Copy package files
 COPY package*.json ./
-COPY node_modules ./node_modules
+
+# Install dependencies
+RUN npm ci
+
+# Copy source
+COPY . .
+
+# Build
+RUN npm run build
+
+# Production stage
+FROM mcr.microsoft.com/playwright:v1.42.0-jammy
+
+WORKDIR /app
+
+# Install dumb-init
+RUN apt-get update && apt-get install -y dumb-init && rm -rf /var/lib/apt/lists/*
+
+# Copy package files and node_modules
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy built application
-COPY .next ./.next
-COPY public ./public
-COPY server.js ./
-COPY app ./app
-COPY next.config.js ./
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/server.js ./
+COPY --from=builder /app/app ./app
+COPY --from=builder /app/next.config.js ./
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
