@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --background: #0a0a0f;
@@ -18,4 +20,22 @@ body {
 
 .glow-purple {
   box-shadow: 0 0 20px rgba(99, 102, 241, 0.3), 0 0 40px rgba(139, 92, 246, 0.2);
+}
+
+/* Video player container */
+.video-container {
+  @apply relative w-full rounded-lg overflow-hidden bg-gray-900;
+  aspect-ratio: 16 / 9;
+}
+
+/* Input styling */
+input[type="text"] {
+  @apply w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg;
+  @apply focus:outline-none focus:border-indigo-500 text-white placeholder-gray-500;
+}
+
+/* Button styling */
+button {
+  @apply px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-700;
+  @apply rounded-lg font-medium transition;
 }
