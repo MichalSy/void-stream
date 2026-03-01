@@ -1,24 +1,38 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import VideoPlayer from '@/components/VideoPlayer'
 
-export default function PlayerPage() {
+function PlayerContent() {
+  const searchParams = useSearchParams()
   const [url, setUrl] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
   const [extracting, setExtracting] = useState(false)
   const [error, setError] = useState('')
-
-  const handlePlay = async () => {
-    if (!url.trim()) return
+  
+  // Auto-load from URL parameter
+  useEffect(() => {
+    const urlParam = searchParams.get('url')
+    if (urlParam) {
+      setUrl(urlParam)
+      // Auto-trigger extraction after a short delay
+      setTimeout(() => {
+        handlePlayWithURL(urlParam)
+      }, 100)
+    }
+  }, [searchParams])
+  
+  const handlePlayWithURL = async (targetUrl: string) => {
+    if (!targetUrl.trim()) return
     
     setError('')
     setExtracting(true)
     
     try {
       // Direct video URL
-      if (url.includes('.m3u8') || url.includes('.mp4')) {
-        setVideoUrl(url)
+      if (targetUrl.includes('.m3u8') || targetUrl.includes('.mp4')) {
+        setVideoUrl(targetUrl)
         return
       }
       
@@ -26,7 +40,7 @@ export default function PlayerPage() {
       const response = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url: targetUrl })
       })
       
       const data = await response.json()
@@ -45,6 +59,10 @@ export default function PlayerPage() {
     } finally {
       setExtracting(false)
     }
+  }
+
+  const handlePlay = async () => {
+    await handlePlayWithURL(url)
   }
 
   return (
@@ -101,5 +119,13 @@ export default function PlayerPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function PlayerPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen void-gradient p-8 flex items-center justify-center">Loading...</div>}>
+      <PlayerContent />
+    </Suspense>
   )
 }
