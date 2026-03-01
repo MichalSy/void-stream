@@ -95,6 +95,7 @@ export default function PlayerPage() {
           <ul className="list-disc list-inside space-y-1">
             <li>HLS Streams (.m3u8)</li>
             <li>MP4 Videos</li>
+            <li>s.to / serienstream.to Links</li>
             <li>VOE Links (automatische Extraction)</li>
           </ul>
         </div>
