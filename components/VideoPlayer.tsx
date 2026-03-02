@@ -30,9 +30,6 @@ export default function VideoPlayer({ src, title }: VideoPlayerProps) {
     // Check if HLS stream
     if (src.includes('.m3u8')) {
       if (Hls.isSupported()) {
-        // Extract base CDN URL from the source
-        const cdnBaseUrl = src.substring(0, src.lastIndexOf('/') + 1)
-        
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
@@ -60,9 +57,17 @@ export default function VideoPlayer({ src, title }: VideoPlayerProps) {
             hls.loadSource(blobUrl)
             hls.attachMedia(video)
             
-            // Cleanup blob URL after loading
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
+              setLoading(false)
               URL.revokeObjectURL(blobUrl)
+              video.play().catch(() => {}) // Autoplay may be blocked
+            })
+
+            hls.on(Hls.Events.ERROR, (_, data) => {
+              if (data.fatal) {
+                setError(`Playback error: ${data.type}`)
+                setLoading(false)
+              }
             })
           })
           .catch(err => {
@@ -71,54 +76,6 @@ export default function VideoPlayer({ src, title }: VideoPlayerProps) {
             setLoading(false)
           })
         
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          setLoading(false)
-          video.play().catch(() => {}) // Autoplay may be blocked
-        })
-
-        hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) {
-            setError(`Playback error: ${data.type}`)
-            setLoading(false)
-          }
-        })
-
-        hlsRef.current = hls
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari)
-        video.src = src
-        video.addEventListener('loadedmetadata', () => {
-          setLoading(false)
-          video.play().catch(() => {})
-        })
-      } else {
-        setError('HLS not supported in this browser')
-        setLoading(false)
-      }
-    } else {
-      // Regular video URL
-      video.src = src
-      video.addEventListener('loadeddata', () => {
-        setLoading(false)
-      })
-      video.addEventListener('error', () => {
-        setError('Failed to load video')
-        setLoading(false)
-      })
-    }
-        
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          setLoading(false)
-          video.play().catch(() => {}) // Autoplay may be blocked
-        })
-
-        hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) {
-            setError(`Playback error: ${data.type}`)
-            setLoading(false)
-          }
-        })
-
         hlsRef.current = hls
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Native HLS support (Safari)
