@@ -1,8 +1,8 @@
 import { createMiddleware } from '@michalsy/aiko-webapp-core/middleware'
 
 export const middleware = createMiddleware({
-  protectedPaths: [],
-  publicPaths: ['/', '/login', '/auth/callback', '/api/extract', '/player'],
+  protectedPaths: ['/player'],
+  publicPaths: ['/', '/login', '/auth/callback', '/api/extract'],
 })
 
 export const config = {
