@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
     if (contentType.includes('mpegurl') || url.includes('.m3u8')) {
       const text = new TextDecoder().decode(body)
       const baseUrl = url.substring(0, url.lastIndexOf('/') + 1)
-      const proxyBaseUrl = `${request.nextUrl.origin}/api/proxy?url=`
+      // Use the request host header to determine the correct origin
+      const host = request.headers.get('host') || 'void-stream.sytko.de'
+      const protocol = host.includes('localhost') ? 'http' : 'https'
+      const proxyBaseUrl = `${protocol}://${host}/api/proxy?url=`
       
       // Rewrite all URLs (absolute and relative) to go through our proxy
       const rewritten = text
