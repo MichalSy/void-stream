@@ -30,15 +30,31 @@ export default function VideoPlayer({ src, title }: VideoPlayerProps) {
     // Check if HLS stream
     if (src.includes('.m3u8')) {
       if (Hls.isSupported()) {
-        // Load master playlist through proxy to bypass CORS
-        const proxySrc = src.includes('edgeon-bandwidth.com') 
-          ? `/api/proxy?url=${encodeURIComponent(src)}`
-          : src
+        // Extract base CDN URL from the source
+        const cdnBaseUrl = src.substring(0, src.lastIndexOf('/') + 1)
         
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
+          // Intercept all requests and proxy through our API
+          xhrSetup: (xhr, url) => {
+            // If it's already an absolute URL to the CDN, proxy it
+            if (url.includes('edgeon-bandwidth.com')) {
+              xhr.open('GET', `/api/proxy?url=${encodeURIComponent(url)}`, true)
+            } else {
+              // It's a relative URL - convert to absolute CDN URL first, then proxy
+              const absoluteUrl = url.startsWith('/') 
+                ? `https://${url.split('/')[2]}${url}` // Extract host from relative
+                : `${cdnBaseUrl}${url}`
+              xhr.open('GET', `/api/proxy?url=${encodeURIComponent(absoluteUrl)}`, true)
+            }
+          },
         })
+        
+        // Load master playlist through proxy
+        const proxySrc = src.includes('edgeon-bandwidth.com') 
+          ? `/api/proxy?url=${encodeURIComponent(src)}`
+          : src
         
         hls.loadSource(proxySrc)
         hls.attachMedia(video)
