@@ -36,15 +36,18 @@ export default function VideoPlayer({ src, title }: VideoPlayerProps) {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
-          // Intercept all requests and proxy through our API
+          // All requests go through our proxy
           xhrSetup: (xhr, url) => {
-            // If it's already an absolute URL to the CDN, proxy it
-            if (url.includes('edgeon-bandwidth.com')) {
+            // If it's already proxied, don't double-proxy
+            if (url.includes('/api/proxy')) {
+              xhr.open('GET', url, true)
+            } else if (url.includes('edgeon-bandwidth.com')) {
+              // Absolute CDN URL - proxy it
               xhr.open('GET', `/api/proxy?url=${encodeURIComponent(url)}`, true)
             } else {
-              // It's a relative URL - convert to absolute CDN URL first, then proxy
-              const absoluteUrl = url.startsWith('/') 
-                ? `https://${url.split('/')[2]}${url}` // Extract host from relative
+              // Relative URL - convert to absolute CDN URL, then proxy
+              const absoluteUrl = url.startsWith('http') 
+                ? url 
                 : `${cdnBaseUrl}${url}`
               xhr.open('GET', `/api/proxy?url=${encodeURIComponent(absoluteUrl)}`, true)
             }
