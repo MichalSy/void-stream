@@ -37,8 +37,13 @@ export async function GET(request: NextRequest) {
         .replace(
           /(https?:\/\/[^\s]+)/g,
           (match) => {
-            // Skip if already a proxy URL
-            if (match.includes('/api/proxy?url=')) return match
+            // Decode and check if already a proxy URL
+            try {
+              const decoded = decodeURIComponent(match)
+              if (decoded.includes('/api/proxy?url=')) return match
+            } catch (e) {
+              // If decoding fails, continue with normal processing
+            }
             return `${proxyBaseUrl}${encodeURIComponent(match)}`
           }
         )
