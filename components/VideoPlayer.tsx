@@ -36,31 +36,76 @@ export default function VideoPlayer({ src, title }: VideoPlayerProps) {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
-          // All requests go through our proxy
-          xhrSetup: (xhr, url) => {
-            // If it's already proxied, don't double-proxy
-            if (url.includes('/api/proxy')) {
-              xhr.open('GET', url, true)
-            } else if (url.includes('edgeon-bandwidth.com')) {
-              // Absolute CDN URL - proxy it
-              xhr.open('GET', `/api/proxy?url=${encodeURIComponent(url)}`, true)
-            } else {
-              // Relative URL - convert to absolute CDN URL, then proxy
-              const absoluteUrl = url.startsWith('http') 
-                ? url 
-                : `${cdnBaseUrl}${url}`
-              xhr.open('GET', `/api/proxy?url=${encodeURIComponent(absoluteUrl)}`, true)
-            }
-          },
         })
         
-        // Load master playlist through proxy
+        // Load master playlist through proxy, then rewrite URLs
         const proxySrc = src.includes('edgeon-bandwidth.com') 
           ? `/api/proxy?url=${encodeURIComponent(src)}`
           : src
         
-        hls.loadSource(proxySrc)
-        hls.attachMedia(video)
+        // Fetch and rewrite the playlist
+        fetch(proxySrc)
+          .then(res => res.text())
+          .then(playlist => {
+            // Rewrite all URLs in the playlist to go through our proxy
+            const rewrittenPlaylist = playlist.replace(
+              /(https?:\/\/[^\s]+)/g,
+              (match) => `/api/proxy?url=${encodeURIComponent(match)}`
+            )
+            
+            // Create a blob URL with the rewritten playlist
+            const blob = new Blob([rewrittenPlaylist], { type: 'application/vnd.apple.mpegurl' })
+            const blobUrl = URL.createObjectURL(blob)
+            
+            hls.loadSource(blobUrl)
+            hls.attachMedia(video)
+            
+            // Cleanup blob URL after loading
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+              URL.revokeObjectURL(blobUrl)
+            })
+          })
+          .catch(err => {
+            console.error('Failed to load playlist:', err)
+            setError('Failed to load video playlist')
+            setLoading(false)
+          })
+        
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          setLoading(false)
+          video.play().catch(() => {}) // Autoplay may be blocked
+        })
+
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          if (data.fatal) {
+            setError(`Playback error: ${data.type}`)
+            setLoading(false)
+          }
+        })
+
+        hlsRef.current = hls
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS support (Safari)
+        video.src = src
+        video.addEventListener('loadedmetadata', () => {
+          setLoading(false)
+          video.play().catch(() => {})
+        })
+      } else {
+        setError('HLS not supported in this browser')
+        setLoading(false)
+      }
+    } else {
+      // Regular video URL
+      video.src = src
+      video.addEventListener('loadeddata', () => {
+        setLoading(false)
+      })
+      video.addEventListener('error', () => {
+        setError('Failed to load video')
+        setLoading(false)
+      })
+    }
         
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           setLoading(false)
