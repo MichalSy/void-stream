@@ -33,6 +33,15 @@ export default function VideoPlayer({ src, title }: VideoPlayerProps) {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
+          // Proxy all HLS requests through our API to bypass CORS
+          xhrSetup: (xhr, url) => {
+            // Check if it's a VOE CDN URL that needs proxying
+            if (url.includes('edgeon-bandwidth.com') || url.includes('.m3u8')) {
+              xhr.open('GET', `/api/proxy?url=${encodeURIComponent(url)}`, true)
+            } else {
+              xhr.open('GET', url, true)
+            }
+          },
         })
         
         hls.loadSource(src)
