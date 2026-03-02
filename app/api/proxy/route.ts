@@ -40,10 +40,16 @@ export async function GET(request: NextRequest) {
             // Decode and check if already a proxy URL
             try {
               const decoded = decodeURIComponent(match)
-              if (decoded.includes('/api/proxy?url=')) return match
+              console.log('[PROXY] Checking URL:', { match: match.substring(0, 100), decoded: decoded.substring(0, 100), isProxy: decoded.includes('/api/proxy?url=') })
+              if (decoded.includes('/api/proxy?url=')) {
+                console.log('[PROXY] Skipping already proxied URL')
+                return match
+              }
             } catch (e) {
+              console.log('[PROXY] Decode failed:', e)
               // If decoding fails, continue with normal processing
             }
+            console.log('[PROXY] Rewriting URL')
             return `${proxyBaseUrl}${encodeURIComponent(match)}`
           }
         )
