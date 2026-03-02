@@ -44,11 +44,20 @@ export default function VideoPlayer({ src, title }: VideoPlayerProps) {
         fetch(proxySrc)
           .then(res => res.text())
           .then(playlist => {
+            // Extract base URL from the original CDN URL for relative URL resolution
+            const cdnBaseUrl = src.substring(0, src.lastIndexOf('/') + 1)
+            
             // Rewrite all URLs in the playlist to go through our proxy
-            const rewrittenPlaylist = playlist.replace(
-              /(https?:\/\/[^\s]+)/g,
-              (match) => `/api/proxy?url=${encodeURIComponent(match)}`
-            )
+            // Handle both absolute URLs and relative URLs
+            const rewrittenPlaylist = playlist
+              .replace(
+                /(https?:\/\/[^\s]+)/g,
+                (match) => `/api/proxy?url=${encodeURIComponent(match)}`
+              )
+              .replace(
+                /^([a-zA-Z0-9_-]+\.(m3u8|ts|key)[^\s]*)$/gm,
+                (match) => `/api/proxy?url=${encodeURIComponent(cdnBaseUrl + match)}`
+              )
             
             // Create a blob URL with the rewritten playlist
             const blob = new Blob([rewrittenPlaylist], { type: 'application/vnd.apple.mpegurl' })
