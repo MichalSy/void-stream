@@ -32,10 +32,15 @@ export async function GET(request: NextRequest) {
       const proxyBaseUrl = `${protocol}://${host}/api/proxy?url=`
       
       // Rewrite all URLs (absolute and relative) to go through our proxy
+      // But skip URLs that are already proxy URLs (avoid double encoding)
       const rewritten = text
         .replace(
           /(https?:\/\/[^\s]+)/g,
-          (match) => `${proxyBaseUrl}${encodeURIComponent(match)}`
+          (match) => {
+            // Skip if already a proxy URL
+            if (match.includes('/api/proxy?url=')) return match
+            return `${proxyBaseUrl}${encodeURIComponent(match)}`
+          }
         )
         .replace(
           /^([a-zA-Z0-9_-]+\.(m3u8|ts|key)(\?[^\s]*)?)$/gm,
