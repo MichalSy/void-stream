@@ -30,21 +30,17 @@ export default function VideoPlayer({ src, title }: VideoPlayerProps) {
     // Check if HLS stream
     if (src.includes('.m3u8')) {
       if (Hls.isSupported()) {
+        // Load master playlist through proxy to bypass CORS
+        const proxySrc = src.includes('edgeon-bandwidth.com') 
+          ? `/api/proxy?url=${encodeURIComponent(src)}`
+          : src
+        
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
-          // Proxy all HLS requests through our API to bypass CORS
-          xhrSetup: (xhr, url) => {
-            // Check if it's a VOE CDN URL that needs proxying
-            if (url.includes('edgeon-bandwidth.com') || url.includes('.m3u8')) {
-              xhr.open('GET', `/api/proxy?url=${encodeURIComponent(url)}`, true)
-            } else {
-              xhr.open('GET', url, true)
-            }
-          },
         })
         
-        hls.loadSource(src)
+        hls.loadSource(proxySrc)
         hls.attachMedia(video)
         
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
