@@ -57,7 +57,7 @@ export default function VideoPlayer({ src, title }: VideoPlayerProps) {
                 (match) => `${proxyBaseUrl}${encodeURIComponent(match)}`
               )
               .replace(
-                /^([a-zA-Z0-9_-]+\.(m3u8|ts|key)[^\s]*)$/gm,
+                /^([a-zA-Z0-9_-]+\.(m3u8|ts|key)(\?[^\s]*)?)$/gm,
                 (match) => `${proxyBaseUrl}${encodeURIComponent(cdnBaseUrl + match)}`
               )
             
